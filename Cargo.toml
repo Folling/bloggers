@@ -1,8 +1,25 @@
 [package]
 name = "bloggers"
-version = "0.1.0"
+version = "0.0.0"
 edition = "2021"
+description = "A pure-rust static content generation library for blog posts"
+authors = ["Folling <coding@folling.de>"]
+repository = "https://github.com/folling/bloggers"
+license = "BSD-3-Clause"
+keywords = [
+    "web",
+    "blogging",
+    "generation",
+]
+categories = [
+    "web-programming",
+]
+readme = "README.md"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
+anyhow = "1.0.55"
+simplelog = "0.11.2"
+log = "0.4.14"
+ 
