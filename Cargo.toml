@@ -20,6 +20,5 @@ readme = "README.md"
 
 [dependencies]
 anyhow = "1.0.55"
-simplelog = "0.11.2"
+env_logger = { version="0.9.0", default-features = false, features = ["termcolor", "humantime", "atty"] }
 log = "0.4.14"
- 
