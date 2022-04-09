@@ -1,0 +1,8 @@
+cognitive-complexity-threshold = 25
+max-fn-params-bools = 4
+max-struct-bools = 5
+too-many-arguments-threshold = 10
+too-many-lines-threshold = 512
+trivial-copy-size-limit = 64
+type-complexity-threshold = 250
+unreadable-literal-lint-fractions = false
