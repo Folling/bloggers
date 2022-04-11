@@ -20,3 +20,4 @@ readme = "README.md"
 anyhow = "1.0.55"
 env_logger = { version="0.9.0", default-features = false, features = ["termcolor", "humantime", "atty"] }
 log = "0.4.14"
+nom = "7.1.1"

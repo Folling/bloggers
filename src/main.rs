@@ -1,4 +1,8 @@
 #![feature(register_tool)]
+#![feature(iter_intersperse)]
+#![feature(main_separator_str)]
+#![feature(let_chains)]
+#![feature(stmt_expr_attributes)]
 #![register_tool(rust_analyzer)]
 #![deny(
     ambiguous_associated_items,
@@ -500,7 +504,6 @@
     clippy::fn_to_numeric_cast_any,
     clippy::if_not_else,
     clippy::imprecise_flops,
-    clippy::integer_arithmetic,
     clippy::integer_division,
     clippy::large_enum_variant,
     clippy::large_stack_arrays,
@@ -548,22 +551,22 @@
     clippy::wildcard_enum_match_arm
 )]
 
+#[allow(clippy::wildcard_imports)]
+use nom::{branch::*, bytes::complete::*, character::complete::*, combinator::*, multi::*, sequence::*, IResult};
 use std::io::Write;
+use std::path::Component::Normal;
 use std::path::{Path, PathBuf};
 
 use anyhow::{anyhow, bail, Ok, Result};
 
-use log::Level;
+use log::{debug, info, warn, Level};
 
-#[macro_use]
-extern crate log;
-
-fn sanitise_path<S: AsRef<str>>(name: &'static str, path: S, dir: bool) -> Result<PathBuf> {
+fn sanitise_path<S: AsRef<str>>(name: &'static str, path: S, dir: bool, must_exist: bool) -> Result<(bool, PathBuf)> {
     info!("{} string is {}", name, path.as_ref());
 
     let path = Path::new(path.as_ref()).canonicalize()?;
 
-    match path.metadata() {
+    let exists = match path.metadata() {
         std::io::Result::Ok(data) => {
             if dir {
                 if !data.is_dir() {
@@ -574,19 +577,211 @@ fn sanitise_path<S: AsRef<str>>(name: &'static str, path: S, dir: bool) -> Resul
             } else {
                 // all is well
             }
+
+            true
         }
         std::io::Result::Err(e) => {
             if e.kind() == std::io::ErrorKind::NotFound {
-                bail!("{} doesn't exist", name);
-            }
+                if must_exist {
+                    bail!("{} doesn't exist", name);
+                }
 
-            bail!("unable to verify whether {} exists", name);
+                false
+            } else {
+                bail!("unable to verify whether {} exists", name);
+            }
         }
     };
 
     info!("{} resolves to {}", name, path.display());
 
-    Ok(path)
+    Ok((exists, path))
+}
+
+fn header(input: &str) -> IResult<&str, String> {
+    map(
+        tuple((many1_count(char('#')), space0, alphanumeric1, newline)),
+        |(level, _, content, _)| format!("<h{0}>{1}</h{0}>", level, content),
+    )(input)
+}
+
+fn code_block(input: &str) -> IResult<&str, String> {
+    map(
+        tuple((tag("```"), opt(alpha1), newline, take_until("```"), tag("```"), opt(newline))),
+        |(_, language, _, content, _, _)| format!("<pre><code class='{}'>{}</code></pre>", language.unwrap_or("nohighlight"), content),
+    )(input)
+}
+
+fn inline_code(input: &str) -> IResult<&str, String> {
+    map(pair(delimited(char('`'), is_not("`"), char('`')), opt(newline)), |(content, _)| {
+        format!("<code class='nohighlight'>{}</code>", content)
+    })(input)
+}
+
+fn horizontal_line(input: &str) -> IResult<&str, String> {
+    map(pair(tag("---"), opt(newline)), |_| String::from("<hr>"))(input)
+}
+
+fn link(input: &str) -> IResult<&str, String> {
+    map(
+        pair(
+            delimited(char('['), is_not("]"), char(']')),
+            delimited(char('('), is_not(")"), char(')')),
+        ),
+        |(display, location)| format!("<a href='{}'>{}</a>", location, display),
+    )(input)
+}
+
+fn media(input: &str) -> IResult<&str, String> {
+    map(
+        tuple((
+            char('!'),
+            delimited(char('['), is_not("]"), char(']')),
+            delimited(char('('), is_not(")"), char(')')),
+        )),
+        |(_, display, location)| format!("<image href='{}'>{}</a>", location, display),
+    )(input)
+}
+
+fn italic(input: &str) -> IResult<&str, String> {
+    map(
+        delimited(
+            char('*'),
+            alt((strikethrough, underlined, map(is_not("*"), std::string::ToString::to_string))),
+            char('*'),
+        ),
+        |content| format!("<i>{}</i>", content),
+    )(input)
+}
+
+fn bold(input: &str) -> IResult<&str, String> {
+    map(
+        delimited(
+            tag("**"),
+            alt((strikethrough, underlined, map(is_not("*"), std::string::ToString::to_string))),
+            tag("**"),
+        ),
+        |content| format!("<b>{}</b>", content),
+    )(input)
+}
+
+fn bold_italic(input: &str) -> IResult<&str, String> {
+    map(
+        delimited(
+            tag("***"),
+            alt((strikethrough, underlined, map(is_not("*"), std::string::ToString::to_string))),
+            tag("***"),
+        ),
+        |content| format!("<i><b>{}</b></i>", content),
+    )(input)
+}
+
+fn underlined(input: &str) -> IResult<&str, String> {
+    map(
+        delimited(
+            char('_'),
+            alt((
+                bold_italic,
+                italic,
+                bold,
+                strikethrough,
+                map(is_not("_"), std::string::ToString::to_string),
+            )),
+            char('_'),
+        ),
+        |content| format!("<u>{}</u>", content),
+    )(input)
+}
+
+fn strikethrough(input: &str) -> IResult<&str, String> {
+    map(
+        delimited(
+            char('~'),
+            alt((
+                bold_italic,
+                italic,
+                bold,
+                underlined,
+                map(is_not("~"), std::string::ToString::to_string),
+            )),
+            char('~'),
+        ),
+        |content| format!("<s>{}</s>", content),
+    )(input)
+}
+
+fn textblock(input: &str) -> IResult<&str, String> {
+    let res = many_till(
+        alt((
+            inline_code,
+            link,
+            media,
+            bold_italic,
+            italic,
+            bold,
+            strikethrough,
+            underlined,
+            map(newline, |_| String::from("<br>")),
+            map(
+                many_till(
+                    alt((map(newline, |_| String::from("<br>")), map(anychar, String::from))),
+                    peek(alt((
+                        map(eof, |_| String::new()),
+                        header,
+                        inline_code,
+                        link,
+                        media,
+                        bold_italic,
+                        italic,
+                        bold,
+                        strikethrough,
+                        underlined,
+                        code_block,
+                        horizontal_line,
+                    ))),
+                ),
+                |(data, _)| data.into_iter().collect(),
+            ),
+        )),
+        alt((map(eof, |_| String::new()), peek(alt((header, code_block, horizontal_line))))),
+    )(input)?;
+
+    #[rustfmt::skip]
+    IResult::Ok((res.0, format!("<p>{}</p>", res.1.0.join(""))))
+}
+
+fn transform_bloggers_markdown<S: AsRef<str>>(content: S) -> Result<String> {
+    let res = many_till(
+        pair(
+            alt((
+                header,
+                horizontal_line,
+                link,
+                media,
+                bold_italic,
+                bold,
+                italic,
+                underlined,
+                strikethrough,
+                code_block,
+                inline_code,
+                textblock,
+            )),
+            opt(newline),
+        ),
+        eof,
+    )(content.as_ref());
+
+    match res {
+        Err(nom::Err::Failure(e) | nom::Err::Error(e)) => bail!("failed with {}", e.code.description()),
+        Err(nom::Err::Incomplete(_)) => bail!("incomplete"),
+        nom::IResult::Ok((_, (v, _))) => {
+            debug!("{:?}", v);
+            Ok(v.into_iter()
+                .map(|(v, lf)| format!("{}{}", v, if lf.is_some() { "<br>" } else { "" }))
+                .collect::<String>())
+        }
+    }
 }
 
 fn main() -> Result<()> {
@@ -634,14 +829,21 @@ fn main() -> Result<()> {
     let first_arg = args
         .get(1)
         .ok_or_else(|| anyhow!("first argument must be the input directory's path"))?;
-    let _input_path = sanitise_path("input path", first_arg, true)?;
+    let (_, input_path) = sanitise_path("input path", first_arg, true, true)?;
 
     let second_arg = args
         .get(2)
         .ok_or_else(|| anyhow!("second argument must be the output directory's path"))?;
-    let _output_path = sanitise_path("output path", second_arg, true)?;
+    let (output_exists, output_path) = sanitise_path("output path", second_arg, true, false)?;
 
-    let template = sanitise_path("html template path", "template.html", false)?;
+    // recreate output directory from scratch
+    if output_exists {
+        std::fs::remove_dir_all(&output_path)?;
+    }
+
+    std::fs::create_dir_all(&output_path)?;
+
+    let (_, template) = sanitise_path("html template path", "template.html", false, true)?;
 
     let content = std::fs::read_to_string(template)?;
 
@@ -679,7 +881,53 @@ fn main() -> Result<()> {
     #[allow(clippy::indexing_slicing, clippy::string_slice)]
     let last = &content[content_idx..];
 
-    info!("{}HEADER GOES HERE{}CONTENT GOES HERE{}", first, intermediate, last);
+    info!("\n{}HEADER GOES HERE{}CONTENT GOES HERE{}", first, intermediate, last);
+
+    let mut files = Vec::with_capacity(1024);
+
+    files.extend(std::fs::read_dir(input_path)?);
+
+    while let Some(std::result::Result::Ok(file)) = files.pop() {
+        let path = file.path();
+
+        info!("generating content for {}", path.display());
+
+        let mut components = path.components();
+        for comp in components.by_ref() {
+            if let Normal(normal) = comp {
+                if normal == "in" {
+                    break;
+                }
+            }
+        }
+
+        let new_path = components.as_path();
+
+        debug!("{}", new_path.display());
+
+        let mut output_new_path = output_path.join(new_path);
+
+        if path.is_dir() {
+            // no need to call create_dir_all here as all previous dirs are guaranteed to have been created beforehand
+            #[allow(clippy::create_dir)]
+            std::fs::create_dir(output_new_path)?;
+
+            files.extend(std::fs::read_dir(file.path())?);
+        } else {
+            let content = std::fs::read_to_string(&path)?;
+            output_new_path.set_file_name("index.html");
+            let mut file = std::fs::File::create(output_new_path)?;
+
+            write!(
+                &mut file,
+                "{}{}{}{}",
+                first,
+                transform_bloggers_markdown(content)?,
+                intermediate,
+                last
+            )?;
+        }
+    }
 
     Ok(())
 }
