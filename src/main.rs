@@ -551,15 +551,16 @@
     clippy::wildcard_enum_match_arm
 )]
 
-#[allow(clippy::wildcard_imports)]
-use nom::{branch::*, bytes::complete::*, character::complete::*, combinator::*, multi::*, sequence::*, IResult};
+mod generation;
+mod markdown;
+
 use std::io::Write;
 use std::path::Component::Normal;
 use std::path::{Path, PathBuf};
 
 use anyhow::{anyhow, bail, Ok, Result};
 
-use log::{debug, info, warn, Level};
+use log::{info, warn, Level};
 
 fn sanitise_path<S: AsRef<str>>(name: &'static str, path: S, dir: bool, must_exist: bool) -> Result<(bool, PathBuf)> {
     info!("{} string is {}", name, path.as_ref());
@@ -596,192 +597,6 @@ fn sanitise_path<S: AsRef<str>>(name: &'static str, path: S, dir: bool, must_exi
     info!("{} resolves to {}", name, path.display());
 
     Ok((exists, path))
-}
-
-fn header(input: &str) -> IResult<&str, String> {
-    map(
-        tuple((many1_count(char('#')), space0, alphanumeric1, newline)),
-        |(level, _, content, _)| format!("<h{0}>{1}</h{0}>", level, content),
-    )(input)
-}
-
-fn code_block(input: &str) -> IResult<&str, String> {
-    map(
-        tuple((tag("```"), opt(alpha1), newline, take_until("```"), tag("```"), opt(newline))),
-        |(_, language, _, content, _, _)| format!("<pre><code class='{}'>{}</code></pre>", language.unwrap_or("nohighlight"), content),
-    )(input)
-}
-
-fn inline_code(input: &str) -> IResult<&str, String> {
-    map(pair(delimited(char('`'), is_not("`"), char('`')), opt(newline)), |(content, _)| {
-        format!("<code class='nohighlight'>{}</code>", content)
-    })(input)
-}
-
-fn horizontal_line(input: &str) -> IResult<&str, String> {
-    map(pair(tag("---"), opt(newline)), |_| String::from("<hr>"))(input)
-}
-
-fn link(input: &str) -> IResult<&str, String> {
-    map(
-        pair(
-            delimited(char('['), is_not("]"), char(']')),
-            delimited(char('('), is_not(")"), char(')')),
-        ),
-        |(display, location)| format!("<a href='{}'>{}</a>", location, display),
-    )(input)
-}
-
-fn media(input: &str) -> IResult<&str, String> {
-    map(
-        tuple((
-            char('!'),
-            delimited(char('['), is_not("]"), char(']')),
-            delimited(char('('), is_not(")"), char(')')),
-        )),
-        |(_, display, location)| format!("<image href='{}'>{}</a>", location, display),
-    )(input)
-}
-
-fn italic(input: &str) -> IResult<&str, String> {
-    map(
-        delimited(
-            char('*'),
-            alt((strikethrough, underlined, map(is_not("*"), std::string::ToString::to_string))),
-            char('*'),
-        ),
-        |content| format!("<i>{}</i>", content),
-    )(input)
-}
-
-fn bold(input: &str) -> IResult<&str, String> {
-    map(
-        delimited(
-            tag("**"),
-            alt((strikethrough, underlined, map(is_not("*"), std::string::ToString::to_string))),
-            tag("**"),
-        ),
-        |content| format!("<b>{}</b>", content),
-    )(input)
-}
-
-fn bold_italic(input: &str) -> IResult<&str, String> {
-    map(
-        delimited(
-            tag("***"),
-            alt((strikethrough, underlined, map(is_not("*"), std::string::ToString::to_string))),
-            tag("***"),
-        ),
-        |content| format!("<i><b>{}</b></i>", content),
-    )(input)
-}
-
-fn underlined(input: &str) -> IResult<&str, String> {
-    map(
-        delimited(
-            char('_'),
-            alt((
-                bold_italic,
-                italic,
-                bold,
-                strikethrough,
-                map(is_not("_"), std::string::ToString::to_string),
-            )),
-            char('_'),
-        ),
-        |content| format!("<u>{}</u>", content),
-    )(input)
-}
-
-fn strikethrough(input: &str) -> IResult<&str, String> {
-    map(
-        delimited(
-            char('~'),
-            alt((
-                bold_italic,
-                italic,
-                bold,
-                underlined,
-                map(is_not("~"), std::string::ToString::to_string),
-            )),
-            char('~'),
-        ),
-        |content| format!("<s>{}</s>", content),
-    )(input)
-}
-
-fn textblock(input: &str) -> IResult<&str, String> {
-    let res = many_till(
-        alt((
-            inline_code,
-            link,
-            media,
-            bold_italic,
-            italic,
-            bold,
-            strikethrough,
-            underlined,
-            map(newline, |_| String::from("<br>")),
-            map(
-                many_till(
-                    alt((map(newline, |_| String::from("<br>")), map(anychar, String::from))),
-                    peek(alt((
-                        map(eof, |_| String::new()),
-                        header,
-                        inline_code,
-                        link,
-                        media,
-                        bold_italic,
-                        italic,
-                        bold,
-                        strikethrough,
-                        underlined,
-                        code_block,
-                        horizontal_line,
-                    ))),
-                ),
-                |(data, _)| data.into_iter().collect(),
-            ),
-        )),
-        alt((map(eof, |_| String::new()), peek(alt((header, code_block, horizontal_line))))),
-    )(input)?;
-
-    #[rustfmt::skip]
-    IResult::Ok((res.0, format!("<p>{}</p>", res.1.0.join(""))))
-}
-
-fn transform_bloggers_markdown<S: AsRef<str>>(content: S) -> Result<String> {
-    let res = many_till(
-        pair(
-            alt((
-                header,
-                horizontal_line,
-                link,
-                media,
-                bold_italic,
-                bold,
-                italic,
-                underlined,
-                strikethrough,
-                code_block,
-                inline_code,
-                textblock,
-            )),
-            opt(newline),
-        ),
-        eof,
-    )(content.as_ref());
-
-    match res {
-        Err(nom::Err::Failure(e) | nom::Err::Error(e)) => bail!("failed with {}", e.code.description()),
-        Err(nom::Err::Incomplete(_)) => bail!("incomplete"),
-        nom::IResult::Ok((_, (v, _))) => {
-            debug!("{:?}", v);
-            Ok(v.into_iter()
-                .map(|(v, lf)| format!("{}{}", v, if lf.is_some() { "<br>" } else { "" }))
-                .collect::<String>())
-        }
-    }
 }
 
 fn main() -> Result<()> {
@@ -881,8 +696,6 @@ fn main() -> Result<()> {
     #[allow(clippy::indexing_slicing, clippy::string_slice)]
     let last = &content[content_idx..];
 
-    info!("\n{}HEADER GOES HERE{}CONTENT GOES HERE{}", first, intermediate, last);
-
     let mut files = Vec::with_capacity(1024);
 
     files.extend(std::fs::read_dir(input_path)?);
@@ -903,8 +716,6 @@ fn main() -> Result<()> {
 
         let new_path = components.as_path();
 
-        debug!("{}", new_path.display());
-
         let mut output_new_path = output_path.join(new_path);
 
         if path.is_dir() {
@@ -918,14 +729,7 @@ fn main() -> Result<()> {
             output_new_path.set_file_name("index.html");
             let mut file = std::fs::File::create(output_new_path)?;
 
-            write!(
-                &mut file,
-                "{}{}{}{}",
-                first,
-                transform_bloggers_markdown(content)?,
-                intermediate,
-                last
-            )?;
+            write!(&mut file, "{}{}{}{}", first, markdown::parser::parse(content)?, intermediate, last)?;
         }
     }
 
