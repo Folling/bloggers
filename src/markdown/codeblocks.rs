@@ -4,12 +4,18 @@ use nom::{bytes::complete::*, character::complete::*, combinator::*, sequence::*
 pub fn code_block(input: &str) -> IResult<&str, String> {
     map(
         tuple((tag("```"), opt(alpha1), newline, take_until("```"), tag("```"), opt(newline))),
-        |(_, language, _, content, _, _)| format!("<pre><code class='{}'>{}</code></pre>", language.unwrap_or("nohighlight"), content),
+        |(_, language, _, content, _, _)| {
+            format!(
+                "<pre><code class='language-{}'>{}</code></pre>",
+                language.unwrap_or("plaintext"),
+                content
+            )
+        },
     )(input)
 }
 
 pub fn inline_code(input: &str) -> IResult<&str, String> {
     map(pair(delimited(char('`'), is_not("`"), char('`')), opt(newline)), |(content, _)| {
-        format!("<code class='nohighlight'>{}</code>", content)
+        format!("<code class='plaintext'>{}</code>", content)
     })(input)
 }

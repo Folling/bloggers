@@ -3,6 +3,7 @@
 #![feature(main_separator_str)]
 #![feature(let_chains)]
 #![feature(stmt_expr_attributes)]
+#![feature(is_some_with)]
 #![register_tool(rust_analyzer)]
 #![deny(
     ambiguous_associated_items,
@@ -662,19 +663,11 @@ fn main() -> Result<()> {
 
     let content = std::fs::read_to_string(template)?;
 
-    let header_needle = "<div id='header_container'>";
     let content_needle = "<div id='content'>";
 
     // the following isn't optimal, we're searching through the string twice instead of once
     // there doesn't appear to be a standard function that covers this usecase and writing up a custom function
     // doesn't seem worth the effort
-
-    let header_idx = content
-        .rfind(header_needle)
-        .and_then(|v| v.checked_add(header_needle.len()))
-        .ok_or_else(|| anyhow!("template.html doesn't contain header needle or integer overflow occurred"))?;
-
-    info!("found header insertion point at idx {}", header_idx);
 
     let content_idx = content
         .rfind(content_needle)
@@ -683,16 +676,9 @@ fn main() -> Result<()> {
 
     info!("found content insertion point at idx {}", content_idx);
 
-    info!(
-        "found header insertion point at idx {} and content insertion point at idx {}",
-        header_idx, content_idx
-    );
-
     // since we're using find we are guaranteed to get the proper byte index
     #[allow(clippy::indexing_slicing, clippy::string_slice)]
-    let first = &content[0..header_idx];
-    #[allow(clippy::indexing_slicing, clippy::string_slice)]
-    let intermediate = &content[header_idx..content_idx];
+    let first = &content[0..content_idx];
     #[allow(clippy::indexing_slicing, clippy::string_slice)]
     let last = &content[content_idx..];
 
@@ -700,8 +686,8 @@ fn main() -> Result<()> {
 
     files.extend(std::fs::read_dir(input_path)?);
 
-    while let Some(std::result::Result::Ok(file)) = files.pop() {
-        let path = file.path();
+    while let Some(file) = files.pop() {
+        let path = file?.path();
 
         info!("generating content for {}", path.display());
 
@@ -722,14 +708,24 @@ fn main() -> Result<()> {
             // no need to call create_dir_all here as all previous dirs are guaranteed to have been created beforehand
             #[allow(clippy::create_dir)]
             std::fs::create_dir(output_new_path)?;
-
-            files.extend(std::fs::read_dir(file.path())?);
+            files.extend(std::fs::read_dir(path)?);
         } else {
-            let content = std::fs::read_to_string(&path)?;
-            output_new_path.set_file_name("index.html");
-            let mut file = std::fs::File::create(output_new_path)?;
+            let extension = path.extension().and_then(std::ffi::OsStr::to_str);
 
-            write!(&mut file, "{}{}{}{}", first, markdown::parser::parse(content)?, intermediate, last)?;
+            match extension {
+                Some("bmd") => {
+                    let content = std::fs::read_to_string(&path)?;
+                    output_new_path.set_file_name("index.html");
+                    let mut file = std::fs::File::create(output_new_path)?;
+
+                    write!(&mut file, "{}{}{}", first, markdown::parser::parse(content)?, last)?;
+                }
+                // ignore scss files
+                Some("scss" | "map") => {}
+                _ => {
+                    std::fs::copy(path, output_new_path)?;
+                }
+            }
         }
     }
 

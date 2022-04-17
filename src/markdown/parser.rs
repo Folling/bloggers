@@ -6,7 +6,7 @@ use crate::markdown::{auxiliary::*, codeblocks::*, links::*, textblock::*, texts
 
 use anyhow::{bail, Result};
 
-`pub fn parse<S: AsRef<str>>(content: S) -> Result<String> {
+pub fn parse<S: AsRef<str>>(content: S) -> Result<String> {
     let res = many_till(
         pair(
             alt((
