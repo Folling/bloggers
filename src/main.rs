@@ -698,16 +698,18 @@ fn main() -> Result<()> {
         let mut output_new_path = output_path.join(new_path);
 
         if path.is_dir() {
-            info!(
-                "path is directory, creating dir {} and appending files to stack",
-                output_new_path.display()
-            );
-            // no need to call create_dir_all here as all previous dirs are guaranteed to have been created beforehand
-            #[allow(clippy::create_dir)]
-            std::fs::create_dir(output_new_path)?;
-            files.extend(std::fs::read_dir(path)?);
+            if path.file_name().and_then(std::ffi::OsStr::to_str) != Some(".sass-cache") {
+                info!(
+                    "path is directory, creating dir {} and appending files to stack",
+                    output_new_path.display()
+                );
+                // no need to call create_dir_all here as all previous dirs are guaranteed to have been created beforehand
+                #[allow(clippy::create_dir)]
+                std::fs::create_dir(output_new_path)?;
+                files.extend(std::fs::read_dir(path)?);
+            }
         } else {
-            info!("path is file");
+            info!("path is a file");
 
             let extension = path.extension().and_then(std::ffi::OsStr::to_str);
 
