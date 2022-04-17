@@ -723,8 +723,8 @@ fn main() -> Result<()> {
                     write!(&mut file, "{}{}{}", first, markdown::parser::parse(content)?, last)?;
                 }
                 // ignore scss files
-                Some("scss" | "map") => {
-                    info!("scss & css.map files are ignored");
+                Some("scss") => {
+                    info!("scss files are ignored");
                 }
                 v => {
                     #[allow(clippy::option_if_let_else)]
