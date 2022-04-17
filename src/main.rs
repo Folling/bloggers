@@ -566,7 +566,7 @@ use log::{info, warn, Level};
 fn sanitise_path<S: AsRef<str>>(name: &'static str, path: S, dir: bool, must_exist: bool) -> Result<(bool, PathBuf)> {
     info!("{} string is {}", name, path.as_ref());
 
-    let path = Path::new(path.as_ref()).canonicalize()?;
+    let path = Path::new(path.as_ref());
 
     let exists = match path.metadata() {
         std::io::Result::Ok(data) => {
@@ -597,7 +597,7 @@ fn sanitise_path<S: AsRef<str>>(name: &'static str, path: S, dir: bool, must_exi
 
     info!("{} resolves to {}", name, path.display());
 
-    Ok((exists, path))
+    Ok((exists, path.to_path_buf()))
 }
 
 fn main() -> Result<()> {
@@ -654,8 +654,11 @@ fn main() -> Result<()> {
 
     // recreate output directory from scratch
     if output_exists {
+        info!("output path exists, removing");
         std::fs::remove_dir_all(&output_path)?;
     }
+
+    info!("creating output directory");
 
     std::fs::create_dir_all(&output_path)?;
 
@@ -705,15 +708,22 @@ fn main() -> Result<()> {
         let mut output_new_path = output_path.join(new_path);
 
         if path.is_dir() {
+            info!(
+                "path is directory, creating dir {} and appending files to stack",
+                output_new_path.display()
+            );
             // no need to call create_dir_all here as all previous dirs are guaranteed to have been created beforehand
             #[allow(clippy::create_dir)]
             std::fs::create_dir(output_new_path)?;
             files.extend(std::fs::read_dir(path)?);
         } else {
+            info!("path is file");
+
             let extension = path.extension().and_then(std::ffi::OsStr::to_str);
 
             match extension {
                 Some("bmd") => {
+                    info!("found bmd file, parsing and generating HTML");
                     let content = std::fs::read_to_string(&path)?;
                     output_new_path.set_file_name("index.html");
                     let mut file = std::fs::File::create(output_new_path)?;
@@ -721,8 +731,17 @@ fn main() -> Result<()> {
                     write!(&mut file, "{}{}{}", first, markdown::parser::parse(content)?, last)?;
                 }
                 // ignore scss files
-                Some("scss" | "map") => {}
-                _ => {
+                Some("scss" | "map") => {
+                    info!("scss & css.map files are ignored");
+                }
+                v => {
+                    #[allow(clippy::option_if_let_else)]
+                    if let Some(v) = v {
+                        info!("extension {} is unknown, copying file to {}", v, output_new_path.display());
+                    } else {
+                        info!("no extension exists, copying file to {}", output_new_path.display());
+                    }
+
                     std::fs::copy(path, output_new_path)?;
                 }
             }
