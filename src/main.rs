@@ -556,7 +556,6 @@ mod generation;
 mod markdown;
 
 use std::io::Write;
-use std::path::Component::Normal;
 use std::path::{Path, PathBuf};
 
 use anyhow::{anyhow, bail, Ok, Result};
@@ -687,23 +686,14 @@ fn main() -> Result<()> {
 
     let mut files = Vec::with_capacity(1024);
 
-    files.extend(std::fs::read_dir(input_path)?);
+    files.extend(std::fs::read_dir(&input_path)?);
 
     while let Some(file) = files.pop() {
         let path = file?.path();
 
         info!("generating content for {}", path.display());
 
-        let mut components = path.components();
-        for comp in components.by_ref() {
-            if let Normal(normal) = comp {
-                if normal == "in" {
-                    break;
-                }
-            }
-        }
-
-        let new_path = components.as_path();
+        let new_path = path.strip_prefix(&input_path)?;
 
         let mut output_new_path = output_path.join(new_path);
 
