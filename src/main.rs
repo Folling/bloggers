@@ -562,10 +562,8 @@ use anyhow::{anyhow, bail, Ok, Result};
 
 use log::{info, warn, Level};
 
-fn sanitise_path<S: AsRef<str>>(name: &'static str, path: S, dir: bool, must_exist: bool) -> Result<(bool, PathBuf)> {
-    info!("{} string is {}", name, path.as_ref());
-
-    let path = Path::new(path.as_ref());
+fn sanitise_path<P: AsRef<Path>>(name: &'static str, path: P, dir: bool, must_exist: bool) -> Result<(bool, PathBuf)> {
+    let path = path.as_ref();
 
     let exists = match path.metadata() {
         std::io::Result::Ok(data) => {
@@ -661,7 +659,7 @@ fn main() -> Result<()> {
 
     std::fs::create_dir_all(&output_path)?;
 
-    let (_, template) = sanitise_path("html template path", "template.html", false, true)?;
+    let (_, template) = sanitise_path("html template path", input_path.join("template.html"), false, true)?;
 
     let content = std::fs::read_to_string(template)?;
 
@@ -686,7 +684,7 @@ fn main() -> Result<()> {
 
     let mut files = Vec::with_capacity(1024);
 
-    files.extend(std::fs::read_dir(&input_path)?);
+    files.extend(std::fs::read_dir(&input_path)?.filter(|v| v.is_ok_and(|v| !v.path().ends_with("template.html"))));
 
     while let Some(file) = files.pop() {
         let path = file?.path();
