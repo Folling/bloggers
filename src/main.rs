@@ -725,12 +725,6 @@ fn main() -> Result<()> {
                 }
                 // generate css files for scss files
                 Some("scss") => {
-                    println!(
-                        "{:?}",
-                        path.file_name()
-                            .and_then(std::ffi::OsStr::to_str)
-                            .is_some_and(|v| v.starts_with('_'))
-                    );
                     info!("encountered scss file");
 
                     // ignore partials
