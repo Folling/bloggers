@@ -697,7 +697,9 @@ fn main() -> Result<()> {
         let mut output_new_path = output_path.join(new_path);
 
         if path.is_dir() {
-            if path.file_name().and_then(std::ffi::OsStr::to_str) != Some(".sass-cache") {
+            if let Some(".sass-cache" | ".git") = path.file_name().and_then(std::ffi::OsStr::to_str) {
+                info!("ignoring .sass-cache & .git");
+            } else {
                 info!(
                     "path is directory, creating dir {} and appending files to stack",
                     output_new_path.display()
