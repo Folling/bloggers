@@ -557,6 +557,7 @@ mod markdown;
 
 use std::io::Write;
 use std::path::{Path, PathBuf};
+use std::process::Command;
 
 use anyhow::{anyhow, bail, Ok, Result};
 
@@ -720,9 +721,26 @@ fn main() -> Result<()> {
 
                     write!(&mut file, "{}{}{}", first, markdown::parser::parse(content)?, last)?;
                 }
-                // ignore scss files
+                // generate css files for scss files
                 Some("scss") => {
-                    info!("scss files are ignored");
+                    info!("path is scss, executing sass to generate css file");
+
+                    let output = Command::new("sass")
+                        .args(
+                            path.to_str()
+                                .ok_or_else(|| anyhow!("unable to convert path {} to str", path.display())),
+                        )
+                        .output()?;
+
+                    if !output.status.success() {
+                        bail!(
+                            "unable to generate sass content for {}. Message: {}",
+                            path.display(),
+                            String::from_utf8(output.stderr)?
+                        )
+                    }
+
+                    std::fs::write(path, String::from_utf8(output.stdout)?)?;
                 }
                 v => {
                     #[allow(clippy::option_if_let_else)]
