@@ -18,6 +18,6 @@ pub fn media(input: &str) -> IResult<&str, String> {
             delimited(char('['), is_not("]"), char(']')),
             delimited(char('('), is_not(")"), char(')')),
         )),
-        |(_, display, location)| format!("<image src='{}' alt='{}'></image>", location, display),
+        |(_, display, location)| format!("<img src='{}' alt='{}'></img>", location, display),
     )(input)
 }
