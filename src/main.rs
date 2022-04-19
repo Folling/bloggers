@@ -725,24 +725,27 @@ fn main() -> Result<()> {
                 }
                 // generate css files for scss files
                 Some("scss") => {
-                    info!("path is scss, executing sass to generate css file");
+                    // ignore partials
+                    if !path.starts_with("_") {
+                        info!("path is scss, executing sass to generate css file");
 
-                    let output = Command::new("sass")
-                        .args(
-                            path.to_str()
-                                .ok_or_else(|| anyhow!("unable to convert path {} to str", path.display())),
-                        )
-                        .output()?;
+                        let output = Command::new("sass")
+                            .args(
+                                path.to_str()
+                                    .ok_or_else(|| anyhow!("unable to convert path {} to str", path.display())),
+                            )
+                            .output()?;
 
-                    if !output.status.success() {
-                        bail!(
-                            "unable to generate sass content for {}. Message: {}",
-                            path.display(),
-                            String::from_utf8(output.stderr)?
-                        )
+                        if !output.status.success() {
+                            bail!(
+                                "unable to generate sass content for {}. Message: {}",
+                                path.display(),
+                                String::from_utf8(output.stderr)?
+                            )
+                        }
+
+                        std::fs::write(output_new_path.with_extension("css"), String::from_utf8(output.stdout)?)?;
                     }
-
-                    std::fs::write(output_new_path.with_extension("css"), String::from_utf8(output.stdout)?)?;
                 }
                 v => {
                     #[allow(clippy::option_if_let_else)]
