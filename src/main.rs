@@ -742,7 +742,7 @@ fn main() -> Result<()> {
                         )
                     }
 
-                    std::fs::write(path, String::from_utf8(output.stdout)?)?;
+                    std::fs::write(output_new_path.with_extension("css"), String::from_utf8(output.stdout)?)?;
                 }
                 v => {
                     #[allow(clippy::option_if_let_else)]
