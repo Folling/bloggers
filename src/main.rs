@@ -566,6 +566,8 @@ use log::{info, warn, Level};
 fn sanitise_path<P: AsRef<Path>>(name: &'static str, path: P, dir: bool, must_exist: bool) -> Result<(bool, PathBuf)> {
     let path = path.as_ref();
 
+    info!("sanitising {}", path.display());
+
     let exists = match path.metadata() {
         std::io::Result::Ok(data) => {
             if dir {
