@@ -1,0 +1,3 @@
+[submodule "rustlints"]
+	path = rustlints
+	url = https://github.com/Folling/rustlints.git
