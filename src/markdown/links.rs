@@ -7,7 +7,7 @@ pub fn link(input: &str) -> IResult<&str, String> {
             delimited(char('['), is_not("]"), char(']')),
             delimited(char('('), is_not(")"), char(')')),
         ),
-        |(display, location)| format!("<a href='{}'>{}</a>", location, display),
+        |(display, location)| format!("<a href='/media/{}'>{}</a>", location, display),
     )(input)
 }
 
@@ -18,6 +18,6 @@ pub fn media(input: &str) -> IResult<&str, String> {
             delimited(char('['), is_not("]"), char(']')),
             delimited(char('('), is_not(")"), char(')')),
         )),
-        |(_, display, location)| format!("<img src='{}' alt='{}'></img>", location, display),
+        |(_, display, location)| format!("<img src='{}' alt='/media/{}'></img>", location, display),
     )(input)
 }
