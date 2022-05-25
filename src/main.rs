@@ -1,9 +1,12 @@
 #![feature(register_tool)]
 #![feature(iter_intersperse)]
 #![feature(main_separator_str)]
+#![feature(generic_const_exprs)]
+#![feature(const_fmt_arguments_new)]
 #![feature(let_chains)]
 #![feature(stmt_expr_attributes)]
 #![feature(is_some_with)]
+#![feature(result_option_inspect)]
 #![register_tool(rust_analyzer)]
 
 mod generation;
@@ -15,6 +18,8 @@ use std::process::Command;
 
 use anyhow::{anyhow, bail, Ok, Result};
 
+use crate::markdown::lexer::Lexer;
+use crate::markdown::parser::Parser;
 use log::{debug, info, Level};
 
 fn sanitise_path<P: AsRef<Path>>(name: &'static str, path: P, dir: bool, must_exist: bool) -> Result<(bool, PathBuf)> {
@@ -186,7 +191,9 @@ fn main() -> Result<()> {
                     output_new_path.set_file_name("index.html");
                     let mut file = std::fs::File::create(output_new_path)?;
 
-                    write!(&mut file, "{}{}{}", first, markdown::parser::parse(content)?, last)?;
+                    let mut parser = Parser::new(content);
+
+                    write!(&mut file, "{}{}{}", first, parser.parse()?, last)?;
                 }
                 // generate css files for scss files
                 Some("scss") => {

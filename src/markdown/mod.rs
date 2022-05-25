@@ -1,6 +1,9 @@
 pub mod auxiliary;
 pub mod codeblocks;
+pub mod items;
+pub mod lexer;
 pub mod links;
+pub mod lists;
 pub mod parser;
 pub mod textblock;
 pub mod textstyles;
