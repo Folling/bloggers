@@ -1,0 +1,1 @@
+./rustlints/check.sh
