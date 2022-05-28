@@ -32,7 +32,8 @@
 use anyhow::{anyhow, bail, Ok, Result};
 
 use crate::markdown::items::{
-    CodeBlock, Header, HorizontalLine, List, ListItem, ListType, Newline, StyledText, Text, TextItem, TextStyleFlags, TopLevelItem,
+    CodeBlock, Header, HorizontalLine, List, ListItem, ListType, Newline, Paragraph, StyledText, Text, TextItem, TextStyleFlags,
+    TopLevelItem,
 };
 use crate::markdown::lexer::Token;
 use crate::Lexer;
@@ -92,8 +93,8 @@ impl Parser {
                         self.items.push(TopLevelItem::CodeBlock { code_block });
                     }
                     _ => {
-                        let text = self.parse_text()?;
-                        self.items.push(TopLevelItem::Text { text });
+                        let paragraph = self.parse_paragraph()?;
+                        self.items.push(TopLevelItem::Paragraph { paragraph });
                     }
                 },
                 Token::Eof => {
@@ -110,6 +111,24 @@ impl Parser {
             }
 
             self.lexer.skip();
+        }
+    }
+
+    pub fn match_until(&mut self, needle: char) -> Result<String> {
+        let mut ret = String::with_capacity(256);
+
+        loop {
+            match self.lexer.peek() {
+                Token::Item(c) if c == needle => {
+                    self.lexer.next();
+                    return Ok(ret);
+                }
+                Token::Item(c) => {
+                    self.lexer.next();
+                    ret.push(c);
+                }
+                v => bail!("expected characters until {} found {:?}", needle, v),
+            }
         }
     }
 
@@ -133,9 +152,7 @@ impl Parser {
         let mut level = 0_u8;
         while self.lexer.peek() == Token::Item('#') {
             level = level.checked_add(1).ok_or_else(|| anyhow!("header level overflow"))?;
-            println!("{:?}", self.lexer.current());
             self.lexer.skip();
-            println!("{:?}", self.lexer.current());
         }
 
         if level > 6 {
@@ -181,8 +198,6 @@ impl Parser {
             #[allow(clippy::as_conversions)]
             let next = self.lexer.peek_n_dyn(next_level);
 
-            println!("{:?}", next);
-
             // list ended
             if next.iter().take(level).any(|v| *v != Token::Item('-')) {
                 break;
@@ -191,7 +206,6 @@ impl Parser {
             #[allow(clippy::indexing_slicing, clippy::match_on_vec_items)]
             match next[level] {
                 Token::Item('#') => {
-                    println!("ordered!");
                     ret.r#type = ListType::Ordered;
                 }
                 Token::Item('-') => {
@@ -262,7 +276,7 @@ impl Parser {
         };
 
         loop {
-            match Ok(self.lexer.next()).inspect(|v| println!("{:?}", v))? {
+            match Ok(self.lexer.next())? {
                 Token::Item(c) => {
                     if escaped {
                         current_str.push(c);
@@ -271,6 +285,28 @@ impl Parser {
                     }
 
                     match c {
+                        '[' => {
+                            let display = self.match_until(']')?;
+                            let mut media = false;
+                            if self.lexer.peek() == Token::Item('!') {
+                                media = true;
+                                self.lexer.next();
+                            }
+
+                            match self.lexer.peek() {
+                                Token::Item('(') => {
+                                    self.lexer.next();
+                                    let link = self.match_until(')')?;
+                                    items.push(if media {
+                                        TextItem::MediaLink { display, link }
+                                    } else {
+                                        TextItem::HyperLink { display, link }
+                                    });
+                                    continue;
+                                }
+                                v => bail!("link/media expected opening parenthesis, found {v} instead"),
+                            }
+                        }
                         '*' => {
                             if self.lexer.peek() == Token::Item('*') {
                                 set_style_flag(
@@ -362,6 +398,10 @@ impl Parser {
                 Token::Eof => bail!("eof without newline"),
             }
         }
+    }
+
+    pub fn parse_paragraph(&mut self) -> Result<Paragraph> {
+        Ok(Paragraph(self.parse_text()?))
     }
 
     pub fn parse_code_block(&mut self) -> Result<CodeBlock> {

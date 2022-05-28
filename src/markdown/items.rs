@@ -74,7 +74,7 @@ pub struct Newline;
 impl Newline {
     #[allow(clippy::unused_self)]
     pub fn generate(&self) -> String {
-        "<br>".to_owned()
+        "".to_owned()
     }
 }
 
@@ -111,10 +111,18 @@ impl Text {
             .iter()
             .map(|v| match v {
                 TextItem::Plain { content } => content.generate(),
-                TextItem::HyperLink { display, link } => format!("<a href='/media/{}>{}</a>'", link, display),
-                TextItem::MediaLink { display, link } => format!("<img src='/media/{}>{}</a>'", link, display),
+                TextItem::HyperLink { display, link } => format!("<a href='{}'>{}</a>", link, display),
+                TextItem::MediaLink { display, link } => format!("<img src='/media/{}' alt='{}'/>", link, display),
             })
             .collect::<String>()
+    }
+}
+
+#[derive(Debug)]
+pub struct Paragraph(pub Text);
+impl Paragraph {
+    pub fn generate(&self) -> String {
+        format!("<p>{}</p>", self.0.generate())
     }
 }
 
@@ -173,7 +181,7 @@ pub enum TopLevelItem {
     Newline { newline: Newline },
     HorizontalLine { line: HorizontalLine },
     Header { header: Header },
-    Text { text: Text },
+    Paragraph { paragraph: Paragraph },
     CodeBlock { code_block: CodeBlock },
     List { list: List },
 }
@@ -185,7 +193,7 @@ impl TopLevelItem {
             TopLevelItem::Newline { newline } => newline.generate(),
             TopLevelItem::HorizontalLine { line: horizontal_line } => horizontal_line.generate(),
             TopLevelItem::Header { header } => header.generate(),
-            TopLevelItem::Text { text } => text.generate(),
+            TopLevelItem::Paragraph { paragraph } => paragraph.generate(),
             TopLevelItem::CodeBlock { code_block } => code_block.generate(),
             TopLevelItem::List { list } => list.generate(),
         }
