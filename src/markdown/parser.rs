@@ -275,6 +275,28 @@ impl Parser {
             }
         };
 
+        let push_text = |items: &mut Vec<TextItem>,
+                         current_str: &mut String,
+                         current_flags_start: &mut TextStyleFlags,
+                         current_flags_end: &mut TextStyleFlags| {
+            if current_flags_start != current_flags_end {
+                bail!("expected style flags to be identical");
+            }
+
+            items.push(TextItem::Plain {
+                content: StyledText {
+                    content: current_str.clone(),
+                    flags: *current_flags_end,
+                },
+            });
+
+            *current_flags_start = TextStyleFlags::empty();
+            *current_flags_end = TextStyleFlags::empty();
+            current_str.clear();
+
+            Ok(())
+        };
+
         loop {
             match Ok(self.lexer.next())? {
                 Token::Item(c) => {
@@ -286,6 +308,17 @@ impl Parser {
 
                     match c {
                         '[' => {
+                            if !current_style_flags_start.is_empty() {
+                                bail!("cannot apply styles to links");
+                            }
+
+                            push_text(
+                                &mut items,
+                                &mut current_str,
+                                &mut current_style_flags_start,
+                                &mut current_style_flags_end,
+                            )?;
+
                             let display = self.match_until(']')?;
                             let mut media = false;
                             if self.lexer.peek() == Token::Item('!') {
@@ -365,16 +398,12 @@ impl Parser {
                     }
 
                     if !current_style_flags_start.is_empty() && current_style_flags_start == current_style_flags_end {
-                        items.push(TextItem::Plain {
-                            content: StyledText {
-                                content: current_str.clone(),
-                                flags: current_style_flags_end,
-                            },
-                        });
-
-                        current_style_flags_start = TextStyleFlags::empty();
-                        current_style_flags_end = TextStyleFlags::empty();
-                        current_str.clear();
+                        push_text(
+                            &mut items,
+                            &mut current_str,
+                            &mut current_style_flags_start,
+                            &mut current_style_flags_end,
+                        )?;
                     }
                 }
                 Token::Newline => {
@@ -386,12 +415,12 @@ impl Parser {
                         );
                     }
 
-                    items.push(TextItem::Plain {
-                        content: StyledText {
-                            content: current_str.clone(),
-                            flags: TextStyleFlags::empty(),
-                        },
-                    });
+                    push_text(
+                        &mut items,
+                        &mut current_str,
+                        &mut current_style_flags_start,
+                        &mut current_style_flags_end,
+                    )?;
 
                     return Ok(Text { items });
                 }

@@ -28,7 +28,7 @@ fn sanitise_path<P: AsRef<Path>>(name: &'static str, path: P, dir: bool, must_ex
     info!("sanitising {}", path.display());
 
     let exists = match path.metadata() {
-        std::io::Result::Ok(data) => {
+        Result::Ok(data) => {
             if dir {
                 if !data.is_dir() {
                     bail!("{} isn't a directory", name);
@@ -41,7 +41,7 @@ fn sanitise_path<P: AsRef<Path>>(name: &'static str, path: P, dir: bool, must_ex
 
             true
         }
-        std::io::Result::Err(e) => {
+        Err(e) => {
             if e.kind() == std::io::ErrorKind::NotFound {
                 if must_exist {
                     bail!("{} doesn't exist", name);
