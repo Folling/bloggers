@@ -133,7 +133,7 @@ fn main() -> Result<()> {
 
     let content = std::fs::read_to_string(template)?;
 
-    let content_needle = "<main id=\"main\">";
+    let content_needle = "<div id=\"main_container\">";
 
     // the following isn't optimal, we're searching through the string twice instead of once
     // there doesn't appear to be a standard function that covers this use case and writing up a custom function
